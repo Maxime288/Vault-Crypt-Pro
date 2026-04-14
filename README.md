@@ -49,7 +49,7 @@ L'outil fonctionne entièrement via des arguments en ligne de commande. Le mot d
 
 **Ajouter un identifiant**
 ```bash
-python3 vault_crypt.py --add "github:MonSuperMdp123!"
+python3 vault_crypt.py --add 'github:MonSuperMdp123!'
 ```
 
 **Lister les secrets**
