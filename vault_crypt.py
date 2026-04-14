@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-🔑 Vault-Crypt Pro
+🔑 Vault-Crypt Pro v1.2
 Gestionnaire de mots de passe sécurisé avec chiffrement AES-256.
+Fonctionnalités : CRUD complet + Rotation de clé (Master Password change).
 """
 
 import os
@@ -32,11 +33,11 @@ BANNER = fr"""
 {C.YELLOW}    \ \/ / _` | | | | | __|   {C.CYAN}| |    | '__| | | | '_ \ | __|{C.RESET}
 {C.YELLOW}     \  / (_| | |_| | | |_    {C.CYAN}| |____| |  | |_| | |_) || |_ {C.RESET}
 {C.YELLOW}      \/ \__,_|\__,_|_|\__|   {C.CYAN} \_____|_|   \__, | .__/  \__|{C.RESET}
-{C.GRAY}          Secure Password Manager v1.1      |___/|_|{C.RESET}
+{C.GRAY}          Secure Password Manager v1.2      |___/|_|{C.RESET}
 """
 
 def derive_key(master_password, salt):
-    """Génère une clé robuste via PBKDF2."""
+    """Génère une clé robuste via PBKDF2 (100 000 itérations)."""
     kdf = PBKDF2HMAC(
         algorithm=hashes.SHA256(),
         length=32,
@@ -46,7 +47,7 @@ def derive_key(master_password, salt):
     return base64.urlsafe_b64encode(kdf.derive(master_password.encode()))
 
 def save_vault(data, password):
-    """Chiffre et sauvegarde le vault sur le disque."""
+    """Chiffre et sauvegarde le vault avec un nouveau sel."""
     salt = os.urandom(16)
     key = derive_key(password, salt)
     f = Fernet(key)
@@ -55,7 +56,7 @@ def save_vault(data, password):
         v_file.write(salt + encrypted_data)
 
 def load_vault(password):
-    """Charge et déchiffre le vault."""
+    """Charge et tente de déchiffrer le vault."""
     if not os.path.exists("vault.db"):
         return {}
     with open("vault.db", "rb") as v_file:
@@ -66,35 +67,47 @@ def load_vault(password):
         key = derive_key(password, salt)
         f = Fernet(key)
         return json.loads(f.decrypt(encrypted_data).decode())
-    except:
+    except Exception:
         return None
 
 def main():
     print(BANNER)
     parser = argparse.ArgumentParser(description="Vault-Crypt Pro: Gestionnaire sécurisé")
-    parser.add_argument("--add", help="Ajouter (format site:password)")
-    parser.add_argument("--delete", help="Supprimer un site (nom du site)")
+    parser.add_argument("--add", help="Ajouter (site:password)")
+    parser.add_argument("--delete", help="Supprimer un site")
     parser.add_argument("--list", action="store_true", help="Lister les entrées")
+    parser.add_argument("--change-master", action="store_true", help="Changer le Master Password")
     args = parser.parse_args()
 
-    # Demander le mot de passe maître de manière sécurisée
-    master_pwd = input(f"{C.BOLD}[?] Entrez votre Master Password : {C.RESET}")
+    # Demander le mot de passe maître actuel
+    master_pwd = input(f"{C.BOLD}[?] Entrez votre Master Password actuel : {C.RESET}")
     vault = load_vault(master_pwd)
 
     if vault is None:
         print(f"{C.RED}[!] Accès refusé : Mot de passe incorrect.{C.RESET}")
         return
 
-    # LOGIQUE DE SUPPRESSION
-    if args.delete:
+    # --- LOGIQUE : CHANGEMENT DE MOT DE PASSE ---
+    if args.change_master:
+        new_pwd = input(f"{C.YELLOW}[*] Entrez votre NOUVEAU Master Password : {C.RESET}")
+        confirm_pwd = input(f"{C.YELLOW}[*] Confirmez le nouveau Master Password : {C.RESET}")
+        
+        if new_pwd == confirm_pwd:
+            save_vault(vault, new_pwd)
+            print(f"{C.GREEN}[+] Master Password mis à jour avec succès !{C.RESET}")
+        else:
+            print(f"{C.RED}[!] Les mots de passe ne correspondent pas.{C.RESET}")
+
+    # --- LOGIQUE : SUPPRESSION ---
+    elif args.delete:
         if args.delete in vault:
             del vault[args.delete]
             save_vault(vault, master_pwd)
             print(f"{C.GREEN}[+] L'entrée '{args.delete}' a été supprimée.{C.RESET}")
         else:
-            print(f"{C.YELLOW}[!] Le site '{args.delete}' n'existe pas dans le vault.{C.RESET}")
+            print(f"{C.YELLOW}[!] Le site '{args.delete}' n'existe pas.{C.RESET}")
 
-    # LOGIQUE D'AJOUT
+    # --- LOGIQUE : AJOUT ---
     elif args.add:
         try:
             site, pwd = args.add.split(":")
@@ -104,7 +117,7 @@ def main():
         except ValueError:
             print(f"{C.RED}[!] Format invalide. Utilisez --add site:password{C.RESET}")
     
-    # LOGIQUE DE LISTE
+    # --- LOGIQUE : LISTE ---
     elif args.list:
         if not vault:
             print(f"{C.GRAY}Le vault est vide.{C.RESET}")
